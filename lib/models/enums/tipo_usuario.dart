@@ -1,0 +1,7 @@
+enum TipoUsuario {
+  ADMIN,
+  OPERACIONAL,
+  PESADOR,
+  PESADOR_LIMPO,
+  CONFIGURADOR_MEDIDA,
+}

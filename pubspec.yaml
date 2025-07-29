@@ -1,0 +1,48 @@
+name: cafepeso_flutter
+description: Sistema de pesagem de café
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=2.19.0 <3.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI
+  cupertino_icons: ^1.0.5
+
+  # Firebase
+  firebase_core: ^2.15.0
+  cloud_firestore: ^4.8.4
+  # firebase_auth: ^4.7.2  # Comentado por causa do erro
+
+  # Utils
+  uuid: ^3.0.7
+  crypto: ^3.0.3  # Para hash SHA-256
+
+  firebase_auth: ^4.15.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+
+
+  # Para adicionar assets ao seu aplicativo, adicione uma seção assets:
+  # assets:
+  #   - images/a_dot_burr.jpeg
+  #   - images/a_dot_ham.jpeg
+
+  # Para adicionar fontes customizadas:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+

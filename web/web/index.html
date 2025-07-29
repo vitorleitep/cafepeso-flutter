@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base href="/">
+    <meta charset="UTF-8">
+    <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+    <meta name="description" content="Sistema de pesagem de café">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="CafePeso">
+    <link rel="apple-touch-icon" href="icons/Icon-192.png">
+    <link rel="icon" type="image/png" href="favicon.png"/>
+    <title>CafePeso</title>
+    <link rel="manifest" href="manifest.json">
+
+    <script>
+        // Wait for flutter to load
+        window.addEventListener('load', function(ev) {
+          // Download main.dart.js
+          _flutter.loader.loadEntrypoint({
+            serviceWorker: {
+              serviceWorkerVersion: serviceWorkerVersion,
+            },
+            onEntrypointLoaded: function(engineInitializer) {
+              engineInitializer.initializeEngine().then(function(appRunner) {
+                appRunner.runApp();
+              });
+            }
+          });
+        });
+    </script>
+</head>
+<body>
+<!-- Firebase App (the core Firebase SDK) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<!-- Add Firebase products that you want to use -->
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+<script>
+    // Your web app's Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyBwUxE4LVBBN03hzkPBo44eNJ-HBfUn-sI",
+      authDomain: "cafepeso-c9541.firebaseapp.com",
+      projectId: "cafepeso-c9541",
+      storageBucket: "cafepeso-c9541.firebasestorage.app",
+      messagingSenderId: "216060882166",
+      appId: "1:216060882166:web:cafepesoweb2024"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+</script>
+
+<script src="flutter.js" defer></script>
+</body>
+</html>
