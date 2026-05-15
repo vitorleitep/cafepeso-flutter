@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Calculadora Ragnarok Landverse</title>
+  <meta name="description" content="Calculadora de farm — zeny por hora com Super Faturar Lv10. Itens em PT/EN." />
+  <meta name="theme-color" content="#36393f" />
+  <meta property="og:title" content="Calculadora Ragnarok Landverse" />
+  <meta property="og:description" content="Zeny/hora com Super Faturar Lv10. Itens PT/EN." />
+  <meta property="og:type" content="website" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <h1>Calculadora <span class="brand">Landverse</span></h1>
+      <div class="lang" role="group" aria-label="Idioma dos itens">
+        <button type="button" class="lang-btn is-active" data-lang="pt" aria-pressed="true">PT</button>
+        <button type="button" class="lang-btn" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+    </header>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Itens farmados</h2>
+        <span class="hint">Preços já com Super Faturar Lv10 (+24%)</span>
+      </div>
+
+      <ul id="rows" class="rows" aria-label="Lista de itens"></ul>
+
+      <button type="button" id="addRow" class="btn btn-ghost">+ Adicionar item</button>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Tempo de farm</h2>
+      </div>
+
+      <div class="time-modes" role="radiogroup" aria-label="Como informar o tempo">
+        <label class="radio">
+          <input type="radio" name="timeMode" value="range" checked />
+          <span>Horário início → fim</span>
+        </label>
+        <label class="radio">
+          <input type="radio" name="timeMode" value="direct" />
+          <span>Horas direto</span>
+        </label>
+      </div>
+
+      <div id="timeRange" class="time-fields">
+        <label class="field">
+          <span>Início</span>
+          <input type="time" id="timeStart" step="60" />
+        </label>
+        <label class="field">
+          <span>Fim</span>
+          <input type="time" id="timeEnd" step="60" />
+        </label>
+      </div>
+
+      <div id="timeDirect" class="time-fields is-hidden">
+        <label class="field">
+          <span>Horas</span>
+          <input type="number" id="timeHours" min="0" step="0.01" inputmode="decimal" placeholder="2.5" />
+        </label>
+      </div>
+    </section>
+
+    <section class="card results" aria-live="polite">
+      <div class="result-row">
+        <span>Total</span>
+        <strong id="rTotal">0 z</strong>
+      </div>
+      <div class="result-row">
+        <span>Tempo</span>
+        <strong id="rTime">—</strong>
+      </div>
+      <div class="result-row result-highlight">
+        <span>Zeny por hora</span>
+        <strong id="rPerHour">—</strong>
+      </div>
+
+      <div class="actions">
+        <button type="button" id="btnCopy" class="btn btn-primary">Copiar resumo para Discord</button>
+        <button type="button" id="btnReset" class="btn btn-ghost">Limpar</button>
+      </div>
+      <p id="copyStatus" class="copy-status" aria-live="polite"></p>
+    </section>
+
+    <footer class="footer">
+      <p>Preços base: rAthena pre-renewal · Tradução PT: CronusDATA · Edite <code>items.js</code> pra ajustar.</p>
+    </footer>
+  </main>
+
+  <datalist id="itemList"></datalist>
+
+  <script src="items.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
