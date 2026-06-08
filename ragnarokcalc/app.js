@@ -225,13 +225,14 @@ function parseTime(str) {
 
 function totalsForMob(mobEntry) {
   const mob = mobById.get(mobEntry.mobId);
-  if (!mob) return { expected: 0, realized: 0, kills: 0 };
+  if (!mob) return { expected: 0, realized: 0, kills: 0, killsEst: null };
   const hours = computeHours();
   const minutes = hours * 60;
   const kpm = Number(mobEntry.kpm) || 0;
   const kills = kpm * minutes;
   const mult = dropMultiplier();
   let expected = 0, realized = 0;
+  let sumQ = 0, sumP = 0, anyReal = false;
   for (const drop of mob.drops) {
     const entry = mobEntry.drops[drop.itemId] || { checked: !drop.isCard, realQty: 0 };
     if (!entry.checked) continue;
@@ -239,9 +240,16 @@ function totalsForMob(mobEntry) {
     const expQty = kills * (drop.rate / 100) * mult;
     expected += expQty * p;
     const rq = Number(entry.realQty) || 0;
-    if (rq > 0) realized += rq * p;
+    if (rq > 0) {
+      realized += rq * p;
+      // Estimativa de mortes (MLE Poisson): só considera drops com qty observada.
+      sumQ += rq;
+      sumP += (drop.rate / 100) * mult;
+      anyReal = true;
+    }
   }
-  return { expected, realized, kills };
+  const killsEst = (anyReal && sumP > 0) ? (sumQ / sumP) : null;
+  return { expected, realized, kills, killsEst };
 }
 function grandTotals() {
   let exp = 0, real = 0;
@@ -450,8 +458,11 @@ function updateMobBody(li, me) {
   const kpm = Number(me.kpm) || 0;
   const kills = kpm * hours * 60;
   const t = totalsForMob(me);
+  const estTxt = (t.killsEst != null) ? ` <span class="dim">· estimado pelos drops: ${nfZ.format(Math.round(t.killsEst))}</span>` : "";
   if (hours > 0 && kpm > 0) {
-    info.innerHTML = `${nfZ.format(Math.round(kills))} mortes · esperado <b>${fmtZeny(t.expected)}</b> · realizado <b>${fmtZeny(t.realized)}</b>`;
+    info.innerHTML = `${nfZ.format(Math.round(kills))} mortes · esperado <b>${fmtZeny(t.expected)}</b> · realizado <b>${fmtZeny(t.realized)}</b>${estTxt}`;
+  } else if (t.killsEst != null) {
+    info.innerHTML = `<span class="dim">Sem KPM/tempo.</span> Estimado pelos drops: <b>${nfZ.format(Math.round(t.killsEst))} mortes</b> · realizado <b>${fmtZeny(t.realized)}</b>`;
   } else {
     info.innerHTML = `<span class="dim">Defina o tempo e a taxa pra ver mortes/esperado.</span>`;
   }
@@ -534,7 +545,8 @@ function buildSummary() {
     const kills = kpm * hours * 60;
     totExp += t.expected;
     totReal += t.realized;
-    lines.push(`${mobName(mob)} · ${nfDec.format(kpm)}/min · ${nfZ.format(Math.round(kills))} mortes`);
+    const estTxt = (t.killsEst != null) ? ` · est. drops ${nfZ.format(Math.round(t.killsEst))}` : "";
+    lines.push(`${mobName(mob)} · ${nfDec.format(kpm)}/min · ${nfZ.format(Math.round(kills))} mortes${estTxt}`);
     for (const drop of mob.drops) {
       const e = me.drops[drop.itemId];
       if (!e || !e.checked) continue;
@@ -618,6 +630,7 @@ function snapshotSession() {
       mobEn: mob.en,
       kpm,
       kills,
+      killsEst: t.killsEst,
       drops: dropsSnap,
       expected: t.expected,
       realized: t.realized,
