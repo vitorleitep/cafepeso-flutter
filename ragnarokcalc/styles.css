@@ -33,19 +33,9 @@ html, body {
   display: flex; flex-direction: column; gap: 14px;
 }
 
-.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 2px; }
+.topbar { display: flex; align-items: center; gap: 12px; padding: 4px 2px; }
 .topbar h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.2px; }
 .topbar .brand { color: var(--accent); margin-left: 6px; }
-
-.lang { display: flex; background: var(--bg-input); border: 1px solid var(--border); border-radius: 999px; padding: 2px; }
-.lang-btn {
-  background: transparent; border: 0; color: var(--text-dim);
-  font: inherit; font-size: 13px; font-weight: 600;
-  padding: 5px 12px; border-radius: 999px; cursor: pointer;
-  transition: background .12s, color .12s;
-}
-.lang-btn.is-active { background: var(--accent); color: #fff; }
-.lang-btn:not(.is-active):hover { color: var(--text); }
 
 .card {
   background: var(--bg-elev);

@@ -1,30 +1,26 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Calculadora Ragnarok Landverse</title>
-  <meta name="description" content="Calculadora de farm — zeny esperado e realizado por hora, com Super Faturar Lv10 e buffs Landverse." />
+  <title>Landverse Farming Calculator</title>
+  <meta name="description" content="Farming calculator — expected vs realized zeny per hour, with Overcharge Lv10 and Landverse buffs." />
   <meta name="theme-color" content="#36393f" />
-  <meta property="og:title" content="Calculadora Ragnarok Landverse" />
-  <meta property="og:description" content="Esperado vs realizado, zeny/hora, buffs Landverse. PT/EN." />
+  <meta property="og:title" content="Landverse Farming Calculator" />
+  <meta property="og:description" content="Expected vs realized zeny per hour. Buffs, Overcharge, mob drops." />
   <meta property="og:type" content="website" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main class="app">
     <header class="topbar">
-      <h1>Calculadora <span class="brand">Landverse</span></h1>
-      <div class="lang" role="group" aria-label="Idioma">
-        <button type="button" class="lang-btn is-active" data-lang="pt" aria-pressed="true">PT</button>
-        <button type="button" class="lang-btn" data-lang="en" aria-pressed="false">EN</button>
-      </div>
+      <h1>Landverse <span class="brand">Farming Calc</span></h1>
     </header>
 
     <section class="card config" aria-labelledby="cfgHead">
       <div class="card-head">
-        <h2 id="cfgHead">Configurações</h2>
-        <span class="hint">afetam só o esperado</span>
+        <h2 id="cfgHead">Settings</h2>
+        <span class="hint">affect expected only</span>
       </div>
       <div class="buffs">
         <label class="chip"><input type="checkbox" data-buff="vip" /><span>VIP <em>+15%</em></span></label>
@@ -36,7 +32,7 @@
         <label class="field">
           <span>Gum</span>
           <select id="gum">
-            <option value="0">Sem Gum</option>
+            <option value="0">No Gum</option>
             <option value="50">Gum 50%</option>
             <option value="100">Gum 100%</option>
             <option value="150">Gum 150%</option>
@@ -46,53 +42,53 @@
         <label class="field">
           <span>Stamina</span>
           <select id="stamina">
-            <option value="1">Com stamina (×1,0)</option>
-            <option value="0.3">Sem stamina (×0,3)</option>
+            <option value="1">With stamina (×1.0)</option>
+            <option value="0.3">No stamina (×0.3)</option>
           </select>
         </label>
       </div>
-      <p class="cfg-sum" id="cfgSum">Multiplicador efetivo: ×1,00</p>
+      <p class="cfg-sum" id="cfgSum">Effective multiplier: ×1.00</p>
     </section>
 
     <section class="card" aria-labelledby="mobsHead">
       <div class="card-head">
-        <h2 id="mobsHead">Mobs farmados</h2>
-        <span class="hint">Super Faturar Lv10 (+24%)</span>
+        <h2 id="mobsHead">Mobs farmed</h2>
+        <span class="hint">Overcharge Lv10 (+24%)</span>
       </div>
       <ul id="mobs" class="mobs"></ul>
       <div class="add-mob">
         <select id="mobPicker"></select>
-        <button type="button" id="addMob" class="btn btn-ghost">+ Adicionar</button>
+        <button type="button" id="addMob" class="btn btn-ghost">+ Add</button>
       </div>
     </section>
 
     <section class="card" aria-labelledby="timeHead">
       <div class="card-head">
-        <h2 id="timeHead">Tempo de farm</h2>
+        <h2 id="timeHead">Farm time</h2>
       </div>
       <div class="time-modes" role="radiogroup">
         <label class="radio">
           <input type="radio" name="timeMode" value="range" checked />
-          <span>Horário início → fim</span>
+          <span>Start → end time</span>
         </label>
         <label class="radio">
           <input type="radio" name="timeMode" value="direct" />
-          <span>Horas direto</span>
+          <span>Hours direct</span>
         </label>
       </div>
       <div id="timeRange" class="time-fields">
         <label class="field">
-          <span>Início</span>
+          <span>Start</span>
           <input type="time" id="timeStart" step="60" />
         </label>
         <label class="field">
-          <span>Fim</span>
+          <span>End</span>
           <input type="time" id="timeEnd" step="60" />
         </label>
       </div>
       <div id="timeDirect" class="time-fields is-hidden">
         <label class="field">
-          <span>Horas</span>
+          <span>Hours</span>
           <input type="number" id="timeHours" min="0" step="0.01" inputmode="decimal" placeholder="2.5" />
         </label>
       </div>
@@ -100,35 +96,35 @@
 
     <section class="card results" aria-live="polite">
       <div class="result-row">
-        <span>Tempo</span>
+        <span>Time</span>
         <strong id="rTime">—</strong>
       </div>
       <div class="result-row">
-        <span>Esperado</span>
+        <span>Expected</span>
         <strong id="rExpTotal">0 z</strong>
       </div>
       <div class="result-row result-highlight">
-        <span>Esperado por hora</span>
+        <span>Expected per hour</span>
         <strong id="rExpPerHour">—</strong>
       </div>
       <div class="result-row">
-        <span>Realizado</span>
+        <span>Realized</span>
         <strong id="rRealTotal">0 z</strong>
       </div>
       <div class="result-row result-highlight">
-        <span>Realizado por hora</span>
+        <span>Realized per hour</span>
         <strong id="rRealPerHour">—</strong>
       </div>
 
       <div class="actions">
-        <button type="button" id="btnCopy" class="btn btn-primary">Copiar resumo para Discord</button>
-        <button type="button" id="btnReset" class="btn btn-ghost">Limpar</button>
+        <button type="button" id="btnCopy" class="btn btn-primary">Copy summary to Discord</button>
+        <button type="button" id="btnReset" class="btn btn-ghost">Clear</button>
       </div>
       <p id="copyStatus" class="copy-status" aria-live="polite"></p>
     </section>
 
     <footer class="footer">
-      <p>Dados: Ragnarok Analytics (Landverse America) · Edite <code>items.js</code> e <code>mobs.js</code>.</p>
+      <p>Data: Ragnarok Analytics (Landverse America) · Edit <code>items.js</code> and <code>mobs.js</code>.</p>
     </footer>
   </main>
 

@@ -1,8 +1,8 @@
 "use strict";
 
-// Super Faturar Lv10 = +24%. RA arredonda (não tronca).
+// Overcharge Lv10 = +24%. RA rounds (not floor).
 const OVERCHARGE_MULT = 1.24;
-const STORAGE_KEY = "rolg.calc.state.v2";
+const STORAGE_KEY = "rolg.calc.state.v3";
 
 const ITEMS = window.ITEMS || [];
 const MOBS = window.MOBS || [];
@@ -13,12 +13,10 @@ const mobById = new Map(MOBS.map((m) => [m.id, m]));
 // ---------- State ----------
 
 const state = {
-  lang: "pt",
   buffs: { vip: false, kafra: false, premium: false, catfruit: false },
-  gum: 0,            // % bônus de drop
-  stamina: 1,        // 1.0 ou 0.3
-  // Cada mob no farm: { uid, mobId, kpm, drops: { itemId: { checked, realQty } } }
-  mobs: [],
+  gum: 0,            // % drop bonus
+  stamina: 1,        // 1.0 or 0.3
+  mobs: [],          // [{ uid, mobId, kpm, drops: { itemId: { checked, realQty } } }]
   timeMode: "range",
   timeStart: "",
   timeEnd: "",
@@ -42,8 +40,9 @@ function uid() { return "m" + Math.random().toString(36).slice(2, 10); }
 
 // ---------- Format ----------
 
-const nfZ = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
-const nfDec = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
+const nfZ = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+const nfDec = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
+const nfDec2 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 
 function fmtZeny(n) {
   if (!isFinite(n) || n <= 0) return "0 z";
@@ -134,8 +133,8 @@ function grandTotals() {
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 
-function mobName(mob) { return state.lang === "en" ? mob.en : mob.pt; }
-function itemName(it) { return state.lang === "en" ? it.en : it.pt; }
+function mobName(mob) { return mob.en; }
+function itemName(it) { return it.en; }
 
 function renderMobPicker() {
   const sel = $("#mobPicker");
@@ -154,7 +153,7 @@ function renderMobs() {
   if (state.mobs.length === 0) {
     const li = document.createElement("li");
     li.className = "mob-empty";
-    li.textContent = state.lang === "en" ? "No mobs added yet." : "Nenhum mob adicionado ainda.";
+    li.textContent = "No mobs added yet.";
     ul.appendChild(li);
     return;
   }
@@ -168,11 +167,10 @@ function mobEl(me) {
   const li = document.createElement("li");
   li.className = "mob";
   if (!mob) {
-    li.textContent = `(mob desconhecido: ${me.mobId})`;
+    li.textContent = `(unknown mob: ${me.mobId})`;
     return li;
   }
 
-  // Header
   const head = document.createElement("div");
   head.className = "mob-head";
 
@@ -182,7 +180,7 @@ function mobEl(me) {
   const kpmWrap = document.createElement("label");
   kpmWrap.className = "kpm";
   const kpmLabel = document.createElement("span");
-  kpmLabel.textContent = "Mortes/min";
+  kpmLabel.textContent = "Kills/min";
   const kpmInput = document.createElement("input");
   kpmInput.type = "number";
   kpmInput.min = "0";
@@ -201,7 +199,7 @@ function mobEl(me) {
   const removeBtn = document.createElement("button");
   removeBtn.type = "button";
   removeBtn.className = "icon-btn";
-  removeBtn.setAttribute("aria-label", "Remover mob");
+  removeBtn.setAttribute("aria-label", "Remove mob");
   removeBtn.textContent = "×";
   removeBtn.addEventListener("click", () => {
     state.mobs = state.mobs.filter((m) => m.uid !== me.uid);
@@ -218,7 +216,6 @@ function mobEl(me) {
   killsInfo.className = "mob-kills";
   li.appendChild(killsInfo);
 
-  // Drops
   const dropsEl = document.createElement("div");
   dropsEl.className = "drops";
   li.appendChild(dropsEl);
@@ -239,7 +236,6 @@ function dropEl(me, drop) {
   row.className = "drop";
   if (drop.isCard) row.classList.add("drop-card");
 
-  // Checkbox + name + rate (header line)
   const top = document.createElement("label");
   top.className = "drop-top";
   const cb = document.createElement("input");
@@ -266,7 +262,7 @@ function dropEl(me, drop) {
 
   const expLine = document.createElement("div");
   expLine.className = "drop-line";
-  const expLab = document.createElement("span"); expLab.textContent = "Esp:";
+  const expLab = document.createElement("span"); expLab.textContent = "Exp:";
   const expVal = document.createElement("span"); expVal.className = "drop-val";
   expLine.append(expLab, expVal);
 
@@ -279,7 +275,7 @@ function dropEl(me, drop) {
   realInput.step = "1";
   realInput.inputMode = "numeric";
   realInput.className = "real-qty";
-  realInput.placeholder = "qtd";
+  realInput.placeholder = "qty";
   realInput.value = entry.realQty || "";
   realInput.addEventListener("input", () => {
     entry.realQty = parseInt(realInput.value, 10) || 0;
@@ -300,7 +296,6 @@ function dropEl(me, drop) {
 }
 
 function updateDropBody(row, me, drop) {
-  const it = itemById.get(drop.itemId);
   const p = priceOC(drop.itemId);
   const entry = me.drops[drop.itemId] || { checked: !drop.isCard, realQty: 0 };
   const hours = computeHours();
@@ -331,14 +326,9 @@ function updateMobBody(li, me) {
   const kills = kpm * hours * 60;
   const t = totalsForMob(me);
   if (hours > 0 && kpm > 0) {
-    info.innerHTML = `${nfZ.format(Math.round(kills))} kills · esperado <b>${fmtZeny(t.expected)}</b> · realizado <b>${fmtZeny(t.realized)}</b>`;
+    info.innerHTML = `${nfZ.format(Math.round(kills))} kills · expected <b>${fmtZeny(t.expected)}</b> · realized <b>${fmtZeny(t.realized)}</b>`;
   } else {
-    info.innerHTML = `<span class="dim">Defina o tempo e KPM pra ver kills/esperado.</span>`;
-  }
-  // also refresh all drop bodies
-  for (const dr of li.querySelectorAll(".drop")) {
-    const dropName = dr.querySelector(".drop-name")?.textContent;
-    // We can't easily look up the drop here; instead refresh by iterating mob's drops list
+    info.innerHTML = `<span class="dim">Set time and KPM to see kills/expected.</span>`;
   }
   const mob = mobById.get(me.mobId);
   if (mob) {
@@ -357,16 +347,15 @@ function updateResults() {
   $("#rRealTotal").textContent = fmtZeny(real);
   $("#rExpPerHour").textContent = hours > 0 && exp > 0 ? fmtZeny(exp / hours) + "/h" : "—";
   $("#rRealPerHour").textContent = hours > 0 && real > 0 ? fmtZeny(real / hours) + "/h" : "—";
-  // Also update all mob bodies in case time changed
   for (const li of $$(".mob")) {
     const uidKey = li.dataset.uid;
     const me = state.mobs.find((m) => m.uid === uidKey);
     if (me) updateMobBody(li, me);
   }
-  $("#cfgSum").textContent = `Multiplicador efetivo: ×${nfDec.format(dropMultiplier())} (buffs +${buffsTotalPct()}%)`;
+  $("#cfgSum").textContent = `Effective multiplier: ×${nfDec2.format(dropMultiplier())} (buffs +${buffsTotalPct()}%)`;
 }
 
-// ---------- Time / Lang / Config UI ----------
+// ---------- Time / Config UI ----------
 
 function syncTimeUI() {
   $("#timeRange").classList.toggle("is-hidden", state.timeMode !== "range");
@@ -375,13 +364,6 @@ function syncTimeUI() {
   $("#timeEnd").value = state.timeEnd || "";
   $("#timeHours").value = state.timeHours || "";
   for (const r of $$('input[name="timeMode"]')) r.checked = r.value === state.timeMode;
-}
-function syncLangUI() {
-  for (const b of $$(".lang-btn")) {
-    const active = b.dataset.lang === state.lang;
-    b.classList.toggle("is-active", active);
-    b.setAttribute("aria-pressed", active ? "true" : "false");
-  }
 }
 function syncConfigUI() {
   for (const cb of $$('.buffs input[type="checkbox"]')) {
@@ -400,12 +382,12 @@ function buildSummary() {
   const buffPct = buffsTotalPct();
 
   const lines = [];
-  lines.push("Calculadora Landverse — Super Faturar Lv10");
+  lines.push("Landverse Farming Calc — Overcharge Lv10");
   if (buffPct > 0 || state.stamina !== 1) {
     const parts = [];
     if (buffPct > 0) parts.push(`buffs +${buffPct}%`);
-    if (Number(state.stamina) === 0.3) parts.push("sem stamina");
-    lines.push(`Modificador: ×${nfDec.format(mult)} (${parts.join(", ")})`);
+    if (Number(state.stamina) === 0.3) parts.push("no stamina");
+    lines.push(`Modifier: ×${nfDec2.format(mult)} (${parts.join(", ")})`);
   }
   lines.push("─".repeat(38));
 
@@ -427,14 +409,14 @@ function buildSummary() {
       const expQty = kills * (drop.rate / 100) * mult;
       const real = Number(e.realQty) || 0;
       const name = it ? itemName(it) : `#${drop.itemId}`;
-      lines.push(`  ${name} ${fmtPct(drop.rate)} · esp ${nfDec.format(expQty)} (${fmtZeny(expQty * p)}) · real ${real} (${fmtZeny(real * p)})`);
+      lines.push(`  ${name} ${fmtPct(drop.rate)} · exp ${nfDec.format(expQty)} (${fmtZeny(expQty * p)}) · real ${real} (${fmtZeny(real * p)})`);
     }
-    lines.push(`  ↳ Subtotal: esp ${fmtZeny(t.expected)} · real ${fmtZeny(t.realized)}`);
+    lines.push(`  ↳ Subtotal: exp ${fmtZeny(t.expected)} · real ${fmtZeny(t.realized)}`);
   }
   lines.push("─".repeat(38));
-  lines.push(`Tempo:     ${fmtDuration(hours)}`);
-  lines.push(`Esperado:  ${fmtZeny(totExp)}${hours > 0 ? ` (${fmtZeny(totExp / hours)}/h)` : ""}`);
-  lines.push(`Realizado: ${fmtZeny(totReal)}${hours > 0 ? ` (${fmtZeny(totReal / hours)}/h)` : ""}`);
+  lines.push(`Time:     ${fmtDuration(hours)}`);
+  lines.push(`Expected: ${fmtZeny(totExp)}${hours > 0 ? ` (${fmtZeny(totExp / hours)}/h)` : ""}`);
+  lines.push(`Realized: ${fmtZeny(totReal)}${hours > 0 ? ` (${fmtZeny(totReal / hours)}/h)` : ""}`);
 
   return "```\n" + lines.join("\n") + "\n```";
 }
@@ -444,7 +426,7 @@ async function copySummary() {
   const status = $("#copyStatus");
   if (!text) {
     status.style.color = "var(--danger)";
-    status.textContent = "Adicione pelo menos um mob.";
+    status.textContent = "Add at least one mob.";
     setTimeout(() => (status.textContent = ""), 2500);
     return;
   }
@@ -461,7 +443,7 @@ async function copySummary() {
     document.body.removeChild(ta);
   }
   status.style.color = "var(--success)";
-  status.textContent = "Resumo copiado! Cole no Discord.";
+  status.textContent = "Summary copied! Paste in Discord.";
   setTimeout(() => (status.textContent = ""), 2500);
 }
 
@@ -490,18 +472,6 @@ function bind() {
   $("#addMob").addEventListener("click", () => {
     addMob($("#mobPicker").value);
   });
-
-  for (const b of $$(".lang-btn")) {
-    b.addEventListener("click", () => {
-      state.lang = b.dataset.lang;
-      renderMobPicker();
-      renderMobs();
-      tagMobLis();
-      syncLangUI();
-      updateResults();
-      save();
-    });
-  }
 
   for (const cb of $$('.buffs input[type="checkbox"]')) {
     cb.addEventListener("change", () => {
@@ -535,7 +505,7 @@ function bind() {
 
   $("#btnCopy").addEventListener("click", copySummary);
   $("#btnReset").addEventListener("click", () => {
-    if (!confirm("Limpar todos os mobs e tempos?")) return;
+    if (!confirm("Clear all mobs and times?")) return;
     state.mobs = [];
     state.timeStart = ""; state.timeEnd = ""; state.timeHours = "";
     renderMobs();
@@ -551,7 +521,6 @@ load();
 renderMobPicker();
 renderMobs();
 tagMobLis();
-syncLangUI();
 syncConfigUI();
 syncTimeUI();
 updateResults();
