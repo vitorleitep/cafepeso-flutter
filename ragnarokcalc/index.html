@@ -9,7 +9,7 @@
   <meta property="og:title" content="Calculadora Landverse — Farm" />
   <meta property="og:description" content="Esperado vs realizado, zeny/h, buffs do Landverse." />
   <meta property="og:type" content="website" />
-  <link rel="stylesheet" href="styles.css?v=6" />
+  <link rel="stylesheet" href="styles.css?v=7" />
 </head>
 <body>
   <main class="app">
@@ -188,6 +188,10 @@
         <h2 id="histHead">Histórico</h2>
         <span class="hint" id="histCount">0 sessões</span>
       </div>
+      <div class="sync-row">
+        <span class="sync-status" id="syncStatus">Local apenas</span>
+        <button type="button" id="btnSync" class="btn-tiny" hidden>↻ Atualizar</button>
+      </div>
 
       <div class="history-totals">
         <div class="ht-cell"><span>Zeny realizado</span><strong id="htZeny">0 z</strong></div>
@@ -212,8 +216,10 @@
     </footer>
   </main>
 
-  <script src="items.js?v=6"></script>
-  <script src="mobs.js?v=6"></script>
-  <script src="app.js?v=6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="config.js?v=7"></script>
+  <script src="items.js?v=7"></script>
+  <script src="mobs.js?v=7"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

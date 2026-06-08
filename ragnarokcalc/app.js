@@ -57,6 +57,111 @@ function saveSessions() {
   try { localStorage.setItem(SESSIONS_KEY, JSON.stringify({ sessions })); } catch (_) {}
 }
 
+// ---------- Cloud (Supabase) ----------
+
+const SUPABASE_URL = (window.SUPABASE_URL || "").trim();
+const SUPABASE_ANON_KEY = (window.SUPABASE_ANON_KEY || "").trim();
+const cloudEnabled = !!(SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase);
+const supa = cloudEnabled
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
+function setSyncStatus(text, kind) {
+  const el = document.querySelector("#syncStatus");
+  if (!el) return;
+  el.textContent = text;
+  el.className = "sync-status" + (kind ? " sync-" + kind : "");
+}
+
+function rowFromSnap(snap) {
+  return {
+    id: snap.id,
+    client_saved_at: snap.savedAt,
+    player_nick: snap.playerNick || null,
+    player_class: snap.playerClass || null,
+    duration_minutes: snap.durationMinutes,
+    buffs_pct: snap.buffsPct,
+    stamina: snap.stamina,
+    multiplier: snap.multiplier,
+    total_expected: Math.round(snap.totalExpected || 0),
+    total_realized: Math.round(snap.totalRealized || 0),
+    total_kills: Math.round(snap.totalKills || 0),
+    data: snap,
+  };
+}
+
+function snapFromRow(row) {
+  // The full snapshot lives in `data`; fields on row are denormalized for indexing.
+  const snap = row.data || {};
+  snap.id = row.id;
+  snap.savedAt = row.client_saved_at || (row.saved_at ? new Date(row.saved_at).getTime() : Date.now());
+  snap.synced = true;
+  return snap;
+}
+
+async function fetchCloudSessions() {
+  if (!supa) return false;
+  try {
+    setSyncStatus("Sincronizando…", "loading");
+    const { data, error } = await supa
+      .from("sessions")
+      .select("*")
+      .order("saved_at", { ascending: false })
+      .limit(500);
+    if (error) throw error;
+    const cloud = (data || []).map(snapFromRow);
+    const cloudIds = new Set(cloud.map((s) => s.id));
+    // Mantém pendentes locais que ainda não chegaram na nuvem.
+    const pending = sessions.filter((s) => s.synced === false && !cloudIds.has(s.id));
+    sessions = [...pending, ...cloud];
+    sessions.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+    saveSessions();
+    renderHistory();
+    setSyncStatus(`Conectado · ${cloud.length} no banco`, "ok");
+    // Tenta reenviar pendentes em background.
+    for (const p of pending) syncSessionToCloud(p, /* silent */ true);
+    return true;
+  } catch (e) {
+    console.warn("fetchCloudSessions:", e);
+    setSyncStatus("Falha de conexão — modo local", "err");
+    return false;
+  }
+}
+
+async function syncSessionToCloud(snap, silent) {
+  if (!supa) {
+    snap.synced = false;
+    return false;
+  }
+  try {
+    const { error } = await supa.from("sessions").insert(rowFromSnap(snap));
+    if (error) throw error;
+    snap.synced = true;
+    saveSessions();
+    renderHistory();
+    if (!silent) setSyncStatus("Sessão enviada pro banco ✓", "ok");
+    return true;
+  } catch (e) {
+    console.warn("syncSessionToCloud:", e);
+    snap.synced = false;
+    saveSessions();
+    if (!silent) setHistStatus("Sessão salva local. Banco indisponível.", true);
+    return false;
+  }
+}
+
+async function deleteSessionCloud(id) {
+  if (!supa) return false;
+  try {
+    const { error } = await supa.from("sessions").delete().eq("id", id);
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.warn("deleteSessionCloud:", e);
+    return false;
+  }
+}
+
 // ---------- Format ----------
 
 const nfZ = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
@@ -539,22 +644,35 @@ function snapshotSession() {
 function addSession() {
   const snap = snapshotSession();
   if (!snap) return null;
+  snap.synced = false;
   sessions.unshift(snap); // mais recente primeiro
   saveSessions();
   renderHistory();
+  // Sincroniza em background; UI continua responsiva.
+  if (cloudEnabled) syncSessionToCloud(snap);
   return snap;
 }
 
 function deleteSession(id) {
+  const target = sessions.find((s) => s.id === id);
   sessions = sessions.filter((s) => s.id !== id);
   saveSessions();
   renderHistory();
+  if (cloudEnabled && target?.synced) {
+    deleteSessionCloud(id).then((ok) => {
+      if (!ok) setHistStatus("Apagado local. Banco indisponível.", true);
+    });
+  }
 }
 
 function clearAllSessions() {
+  // Em modo cloud, isso só limpa a visão local — o banco mantém.
   sessions = [];
   saveSessions();
   renderHistory();
+  if (cloudEnabled) {
+    setHistStatus("Cache local limpo. ↻ Atualizar pra buscar do banco.");
+  }
 }
 
 // ---------- History render ----------
@@ -603,6 +721,7 @@ function renderHistory() {
 function historyItemEl(s) {
   const li = document.createElement("li");
   li.className = "hist-item";
+  if (cloudEnabled && s.synced === false) li.classList.add("hist-pending");
 
   const details = document.createElement("details");
   const summary = document.createElement("summary");
@@ -732,6 +851,17 @@ async function importJSON(file) {
     saveSessions();
     renderHistory();
     setHistStatus(`Importado: ${incoming.length} sessão${incoming.length === 1 ? "" : "es"}.`);
+
+    // Em modo cloud, manda pro banco (uma por vez, ignora se já existir).
+    if (cloudEnabled) {
+      let sent = 0;
+      for (const s of incoming) {
+        s.synced = false;
+        const ok = await syncSessionToCloud(s, /* silent */ true);
+        if (ok) sent++;
+      }
+      setHistStatus(`Importado: ${incoming.length} · enviado pro banco: ${sent}.`);
+    }
   } catch (e) {
     setHistStatus("Erro lendo o arquivo: " + e.message, true);
   }
@@ -823,11 +953,20 @@ function bind() {
   });
   $("#btnClearHist").addEventListener("click", () => {
     if (sessions.length === 0) return;
-    if (confirm(`Apagar TODAS as ${sessions.length} sessões do histórico? Essa ação não tem volta (faça export antes).`)) {
+    const msg = cloudEnabled
+      ? `Limpar visualização local das ${sessions.length} sessões? O banco compartilhado MANTÉM tudo — basta atualizar pra ver de novo.`
+      : `Apagar TODAS as ${sessions.length} sessões do histórico? Essa ação não tem volta (faça export antes).`;
+    if (confirm(msg)) {
       clearAllSessions();
-      setHistStatus("Histórico apagado.");
+      if (!cloudEnabled) setHistStatus("Histórico apagado.");
     }
   });
+
+  const btnSync = $("#btnSync");
+  if (btnSync && cloudEnabled) {
+    btnSync.hidden = false;
+    btnSync.addEventListener("click", fetchCloudSessions);
+  }
 
   $("#btnCopy").addEventListener("click", copySummary);
   $("#btnReset").addEventListener("click", () => {
@@ -854,3 +993,10 @@ syncTimeUI();
 updateResults();
 renderHistory();
 bind();
+
+if (cloudEnabled) {
+  setSyncStatus("Conectando…", "loading");
+  fetchCloudSessions();
+} else {
+  setSyncStatus("Local apenas (configure config.js pra sincronizar)");
+}

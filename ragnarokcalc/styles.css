@@ -308,6 +308,40 @@ html, body {
 }
 .history-actions .btn { flex: 1 1 auto; padding: 8px 10px; font-size: 13px; }
 
+.sync-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 4px 2px;
+  font-size: 11px;
+}
+.sync-status {
+  color: var(--text-mute);
+  font-variant-numeric: tabular-nums;
+}
+.sync-status.sync-ok { color: var(--success); }
+.sync-status.sync-loading { color: var(--warn); }
+.sync-status.sync-err { color: var(--danger); }
+
+.btn-tiny {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-dim); font: inherit; font-size: 11px;
+  padding: 3px 8px; border-radius: 4px; cursor: pointer;
+}
+.btn-tiny:hover { background: var(--bg-input); color: var(--text); }
+
+.hist-item.hist-pending {
+  outline: 1px dashed var(--warn);
+  outline-offset: -1px;
+}
+.hist-item.hist-pending summary::after {
+  content: "↻ pendente";
+  font-size: 10px;
+  color: var(--warn);
+  background: rgba(250,166,26,0.12);
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 4px;
+}
+
 @media (max-width: 380px) {
   .cfg-row { grid-template-columns: 1fr; }
   .topbar h1 { font-size: 16px; }
