@@ -51,6 +51,9 @@ html, body {
 }
 .hint { font-size: 11px; color: var(--text-mute); }
 
+/* === Player === */
+.player-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
 /* === Config / Buffs === */
 .buffs { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {
@@ -212,6 +215,98 @@ html, body {
 
 .footer { text-align: center; font-size: 11px; color: var(--text-mute); padding: 4px 8px; }
 .footer code { background: var(--bg-input); padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+
+/* === History === */
+.history { padding: 14px; }
+.history-totals {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  background: var(--bg-input);
+  border-radius: 6px;
+  padding: 8px;
+}
+.ht-cell {
+  display: flex; flex-direction: column;
+  padding: 6px 8px; min-width: 0;
+}
+.ht-cell > span {
+  font-size: 10px; text-transform: uppercase;
+  color: var(--text-mute); letter-spacing: 0.4px;
+}
+.ht-cell > strong {
+  font-size: 15px; font-weight: 600;
+  font-variant-numeric: tabular-nums; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.history-list {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.hist-empty {
+  color: var(--text-mute); font-size: 13px; text-align: center;
+  padding: 14px 10px; border: 1px dashed var(--border); border-radius: 6px;
+}
+.hist-item { background: var(--bg-input); border-radius: 6px; }
+.hist-item details { overflow: hidden; border-radius: 6px; }
+.hist-item summary {
+  list-style: none;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.hist-item summary::-webkit-details-marker { display: none; }
+.hist-item summary::before {
+  content: "▸"; color: var(--text-mute); font-size: 11px;
+  transition: transform .12s;
+}
+.hist-item details[open] summary::before { transform: rotate(90deg); }
+.hist-date { color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: 12px; }
+.hist-mobs {
+  color: var(--text); font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0;
+}
+.hist-zeny { color: var(--text); font-variant-numeric: tabular-nums; font-size: 13px; text-align: right; }
+.hist-zeny .dim { color: var(--text-mute); font-size: 11px; }
+
+.hist-body {
+  padding: 4px 12px 12px;
+  border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.hist-meta { font-size: 11px; color: var(--text-mute); padding-top: 6px; }
+.hist-mob {
+  background: var(--bg-elev); border-radius: 5px; padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.hist-mob h4 {
+  margin: 0; font-size: 12px; font-weight: 600;
+  color: var(--text-dim); letter-spacing: 0.2px;
+}
+.hist-mob h4 .dim { color: var(--text-mute); font-weight: 400; }
+.hist-drop {
+  font-size: 12px; color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  padding-left: 8px;
+}
+.hist-item-actions {
+  display: flex; justify-content: flex-end; gap: 6px;
+}
+.btn-small { padding: 5px 10px; font-size: 12px; }
+.btn-danger { color: var(--danger); }
+.btn-danger:hover { background: rgba(237,66,69,0.12); color: var(--danger); }
+
+.history-actions {
+  display: flex; gap: 6px; margin-top: 10px;
+  flex-wrap: wrap;
+}
+.history-actions .btn { flex: 1 1 auto; padding: 8px 10px; font-size: 13px; }
 
 @media (max-width: 380px) {
   .cfg-row { grid-template-columns: 1fr; }

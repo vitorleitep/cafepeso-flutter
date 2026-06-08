@@ -3,6 +3,7 @@
 // Overcharge Lv10 = +24%. RA rounds (not floor).
 const OVERCHARGE_MULT = 1.24;
 const STORAGE_KEY = "rolg.calc.state.v3";
+const SESSIONS_KEY = "rolg.calc.sessions.v1";
 
 const ITEMS = window.ITEMS || [];
 const MOBS = window.MOBS || [];
@@ -13,6 +14,8 @@ const mobById = new Map(MOBS.map((m) => [m.id, m]));
 // ---------- State ----------
 
 const state = {
+  playerNick: "",
+  playerClass: "",
   buffs: { vip: false, kafra: false, premium: false, catfruit: false },
   gum: 0,            // % drop bonus
   stamina: 1,        // 1.0 or 0.3
@@ -37,6 +40,22 @@ function load() {
   } catch (_) {}
 }
 function uid() { return "m" + Math.random().toString(36).slice(2, 10); }
+
+// ---------- Sessions (histórico) ----------
+
+let sessions = [];
+
+function loadSessions() {
+  try {
+    const raw = localStorage.getItem(SESSIONS_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed?.sessions)) sessions = parsed.sessions;
+  } catch (_) {}
+}
+function saveSessions() {
+  try { localStorage.setItem(SESSIONS_KEY, JSON.stringify({ sessions })); } catch (_) {}
+}
 
 // ---------- Format ----------
 
@@ -373,6 +392,10 @@ function syncConfigUI() {
   $("#gum").value = String(state.gum);
   $("#stamina").value = String(state.stamina);
 }
+function syncPlayerUI() {
+  $("#playerNick").value = state.playerNick || "";
+  $("#playerClass").value = state.playerClass || "";
+}
 
 // ---------- Copy summary ----------
 
@@ -384,6 +407,11 @@ function buildSummary() {
 
   const lines = [];
   lines.push("Calculadora Landverse — Super Faturar Lv10");
+  const nick = (state.playerNick || "").trim();
+  const cls = (state.playerClass || "").trim();
+  if (nick || cls) {
+    lines.push(`Jogador: ${nick || "?"}${cls ? ` (${cls})` : ""}`);
+  }
   if (buffPct > 0 || state.stamina !== 1) {
     const parts = [];
     if (buffPct > 0) parts.push(`buffs +${buffPct}%`);
@@ -448,6 +476,267 @@ async function copySummary() {
   setTimeout(() => (status.textContent = ""), 2500);
 }
 
+// ---------- Sessions API ----------
+
+function snapshotSession() {
+  const hours = computeHours();
+  const minutes = Math.round(hours * 60);
+  if (state.mobs.length === 0) return null;
+  if (minutes <= 0) return null;
+  // Calcula totais e contagens
+  let totalExpected = 0;
+  let totalRealized = 0;
+  let totalKills = 0;
+  const mobsSnap = [];
+  for (const me of state.mobs) {
+    const mob = mobById.get(me.mobId);
+    if (!mob) continue;
+    const t = totalsForMob(me);
+    const kpm = Number(me.kpm) || 0;
+    const kills = kpm * hours * 60;
+    totalExpected += t.expected;
+    totalRealized += t.realized;
+    totalKills += kills;
+    // Salva drops com qty real (esp recalculado depois se necessário)
+    const dropsSnap = {};
+    for (const drop of mob.drops) {
+      const e = me.drops[drop.itemId];
+      if (!e) continue;
+      dropsSnap[drop.itemId] = {
+        checked: !!e.checked,
+        realQty: Number(e.realQty) || 0,
+        rate: drop.rate,
+      };
+    }
+    mobsSnap.push({
+      mobId: me.mobId,
+      mobEn: mob.en,
+      kpm,
+      kills,
+      drops: dropsSnap,
+      expected: t.expected,
+      realized: t.realized,
+    });
+  }
+  return {
+    id: "s_" + Math.random().toString(36).slice(2, 10),
+    savedAt: Date.now(),
+    playerNick: (state.playerNick || "").trim(),
+    playerClass: (state.playerClass || "").trim(),
+    durationMinutes: minutes,
+    buffs: { ...state.buffs },
+    gum: Number(state.gum) || 0,
+    stamina: Number(state.stamina) || 1,
+    multiplier: dropMultiplier(),
+    buffsPct: buffsTotalPct(),
+    mobs: mobsSnap,
+    totalExpected,
+    totalRealized,
+    totalKills,
+  };
+}
+
+function addSession() {
+  const snap = snapshotSession();
+  if (!snap) return null;
+  sessions.unshift(snap); // mais recente primeiro
+  saveSessions();
+  renderHistory();
+  return snap;
+}
+
+function deleteSession(id) {
+  sessions = sessions.filter((s) => s.id !== id);
+  saveSessions();
+  renderHistory();
+}
+
+function clearAllSessions() {
+  sessions = [];
+  saveSessions();
+  renderHistory();
+}
+
+// ---------- History render ----------
+
+function fmtDateBR(epochMs) {
+  const d = new Date(epochMs);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yy = String(d.getFullYear()).slice(-2);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${dd}/${mm}/${yy} ${hh}:${mi}`;
+}
+
+function renderHistory() {
+  const list = $("#historyList");
+  list.replaceChildren();
+
+  $("#histCount").textContent = sessions.length === 1 ? "1 sessão" : `${sessions.length} sessões`;
+
+  let totZeny = 0, totMin = 0, totKills = 0;
+  for (const s of sessions) {
+    totZeny += s.totalRealized || 0;
+    totMin += s.durationMinutes || 0;
+    totKills += s.totalKills || 0;
+  }
+  const totH = totMin / 60;
+  $("#htZeny").textContent = fmtZeny(totZeny);
+  $("#htHours").textContent = totH > 0 ? fmtDuration(totH) : "—";
+  $("#htKills").textContent = nfZ.format(Math.round(totKills));
+  $("#htAvg").textContent = totH > 0 && totZeny > 0 ? fmtZeny(totZeny / totH) + "/h" : "—";
+
+  if (sessions.length === 0) {
+    const li = document.createElement("li");
+    li.className = "hist-empty";
+    li.textContent = "Nenhuma sessão salva ainda.";
+    list.appendChild(li);
+    return;
+  }
+
+  for (const s of sessions) {
+    list.appendChild(historyItemEl(s));
+  }
+}
+
+function historyItemEl(s) {
+  const li = document.createElement("li");
+  li.className = "hist-item";
+
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+
+  const date = document.createElement("span");
+  date.className = "hist-date";
+  date.textContent = fmtDateBR(s.savedAt);
+
+  const player = (s.playerNick || s.playerClass)
+    ? `${s.playerNick || "?"}${s.playerClass ? ` (${s.playerClass})` : ""} · `
+    : "";
+  const mobs = document.createElement("span");
+  mobs.className = "hist-mobs";
+  mobs.textContent = player + s.mobs.map((m) => m.mobEn).join(", ");
+
+  const zeny = document.createElement("span");
+  zeny.className = "hist-zeny";
+  const hrs = (s.durationMinutes || 0) / 60;
+  const zh = hrs > 0 ? fmtZeny(s.totalRealized / hrs) + "/h" : "";
+  zeny.innerHTML = `<b>${fmtZeny(s.totalRealized)}</b>${zh ? ` <span class="dim">(${zh})</span>` : ""}`;
+
+  summary.append(date, mobs, zeny);
+  details.appendChild(summary);
+
+  const body = document.createElement("div");
+  body.className = "hist-body";
+
+  // resumo de buffs
+  const meta = document.createElement("div");
+  meta.className = "hist-meta";
+  const buffStr = s.buffsPct > 0 ? `buffs +${s.buffsPct}%` : "sem buffs";
+  const stam = s.stamina === 0.3 ? ", sem stamina" : "";
+  meta.textContent = `${fmtDuration(hrs)} · mult ×${nfDec2.format(s.multiplier)} (${buffStr}${stam}) · ${nfZ.format(Math.round(s.totalKills))} mortes · esperado ${fmtZeny(s.totalExpected)}`;
+  body.appendChild(meta);
+
+  // detalhes por mob
+  for (const m of s.mobs) {
+    const mobBlock = document.createElement("div");
+    mobBlock.className = "hist-mob";
+    const h = document.createElement("h4");
+    const mobObj = mobById.get(m.mobId);
+    const mobLabel = mobObj ? mobObj.en : m.mobEn;
+    const hrsM = (s.durationMinutes || 0) / 60;
+    const zhM = hrsM > 0 ? fmtZeny(m.realized / hrsM) + "/h" : "";
+    h.innerHTML = `${mobLabel} · ${nfDec.format(m.kpm)}/min · ${nfZ.format(Math.round(m.kills))} mortes <span class="dim">— real ${fmtZeny(m.realized)}${zhM ? ` (${zhM})` : ""}</span>`;
+    mobBlock.appendChild(h);
+
+    for (const itemId in m.drops) {
+      const d = m.drops[itemId];
+      if (!d.checked || !d.realQty) continue;
+      const it = itemById.get(Number(itemId));
+      const name = it ? it.en : `#${itemId}`;
+      const p = priceOC(Number(itemId));
+      const line = document.createElement("div");
+      line.className = "hist-drop";
+      line.textContent = `${d.realQty}× ${name} · ${fmtZeny(d.realQty * p)}`;
+      mobBlock.appendChild(line);
+    }
+    body.appendChild(mobBlock);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "hist-item-actions";
+  const del = document.createElement("button");
+  del.type = "button";
+  del.className = "btn btn-ghost btn-small btn-danger";
+  del.textContent = "Apagar";
+  del.addEventListener("click", () => {
+    if (confirm("Apagar essa sessão do histórico?")) deleteSession(s.id);
+  });
+  actions.appendChild(del);
+  body.appendChild(actions);
+
+  details.appendChild(body);
+  li.appendChild(details);
+  return li;
+}
+
+function setHistStatus(msg, isError) {
+  const el = $("#histStatus");
+  el.style.color = isError ? "var(--danger)" : "var(--success)";
+  el.textContent = msg || "";
+  if (msg) setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 3000);
+}
+
+// ---------- Export / Import ----------
+
+function exportJSON() {
+  const data = {
+    exportedAt: new Date().toISOString(),
+    sessions,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+  a.href = url;
+  a.download = `landverse-calc-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  setHistStatus(`Exportado: ${sessions.length} sessão${sessions.length === 1 ? "" : "es"}.`);
+}
+
+async function importJSON(file) {
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if (!Array.isArray(data?.sessions)) {
+      setHistStatus("Arquivo inválido: faltou campo 'sessions'.", true);
+      return;
+    }
+    // Pergunta: substituir ou somar
+    const merge = sessions.length === 0
+      ? true
+      : confirm(`Você já tem ${sessions.length} sessão(ões).\n\nOK = somar (mantém as atuais e adiciona as do arquivo)\nCancelar = substituir (apaga as atuais)`);
+    const incoming = data.sessions.filter((s) => s && s.id && Array.isArray(s.mobs));
+    if (merge) {
+      const existingIds = new Set(sessions.map((s) => s.id));
+      const fresh = incoming.filter((s) => !existingIds.has(s.id));
+      sessions = [...fresh, ...sessions];
+    } else {
+      sessions = incoming;
+    }
+    sessions.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+    saveSessions();
+    renderHistory();
+    setHistStatus(`Importado: ${incoming.length} sessão${incoming.length === 1 ? "" : "es"}.`);
+  } catch (e) {
+    setHistStatus("Erro lendo o arquivo: " + e.message, true);
+  }
+}
+
 // ---------- Wire-up ----------
 
 function addMob(mobId) {
@@ -504,6 +793,42 @@ function bind() {
   $("#timeEnd").addEventListener("input", (e) => { state.timeEnd = e.target.value; updateResults(); save(); });
   $("#timeHours").addEventListener("input", (e) => { state.timeHours = e.target.value; updateResults(); save(); });
 
+  $("#playerNick").addEventListener("input", (e) => { state.playerNick = e.target.value; save(); });
+  $("#playerClass").addEventListener("input", (e) => { state.playerClass = e.target.value; save(); });
+
+  $("#btnSave").addEventListener("click", () => {
+    const snap = addSession();
+    const status = $("#copyStatus");
+    if (!snap) {
+      status.style.color = "var(--danger)";
+      status.textContent = "Adicione mob, KPM e tempo antes de salvar.";
+    } else {
+      status.style.color = "var(--success)";
+      status.textContent = `Sessão salva! Histórico: ${sessions.length}.`;
+    }
+    setTimeout(() => (status.textContent = ""), 3000);
+  });
+
+  $("#btnExport").addEventListener("click", () => {
+    if (sessions.length === 0) {
+      setHistStatus("Nada pra exportar.", true);
+      return;
+    }
+    exportJSON();
+  });
+  $("#fileImport").addEventListener("change", (e) => {
+    const f = e.target.files?.[0];
+    if (f) importJSON(f);
+    e.target.value = "";
+  });
+  $("#btnClearHist").addEventListener("click", () => {
+    if (sessions.length === 0) return;
+    if (confirm(`Apagar TODAS as ${sessions.length} sessões do histórico? Essa ação não tem volta (faça export antes).`)) {
+      clearAllSessions();
+      setHistStatus("Histórico apagado.");
+    }
+  });
+
   $("#btnCopy").addEventListener("click", copySummary);
   $("#btnReset").addEventListener("click", () => {
     if (!confirm("Limpar todos os mobs e tempos?")) return;
@@ -519,10 +844,13 @@ function bind() {
 // ---------- Init ----------
 
 load();
+loadSessions();
 renderMobPicker();
 renderMobs();
 tagMobLis();
 syncConfigUI();
+syncPlayerUI();
 syncTimeUI();
 updateResults();
+renderHistory();
 bind();

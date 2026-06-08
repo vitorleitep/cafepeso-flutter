@@ -9,13 +9,72 @@
   <meta property="og:title" content="Calculadora Landverse — Farm" />
   <meta property="og:description" content="Esperado vs realizado, zeny/h, buffs do Landverse." />
   <meta property="og:type" content="website" />
-  <link rel="stylesheet" href="styles.css?v=4" />
+  <link rel="stylesheet" href="styles.css?v=6" />
 </head>
 <body>
   <main class="app">
     <header class="topbar">
       <h1>Landverse <span class="brand">Farming Calc</span></h1>
     </header>
+
+    <section class="card player" aria-labelledby="plHead">
+      <div class="card-head">
+        <h2 id="plHead">Jogador</h2>
+        <span class="hint">vai no histórico</span>
+      </div>
+      <div class="player-row">
+        <label class="field">
+          <span>Nick</span>
+          <input type="text" id="playerNick" autocomplete="off" spellcheck="false" placeholder="VitorBR" maxlength="24" />
+        </label>
+        <label class="field">
+          <span>Classe</span>
+          <input type="text" id="playerClass" autocomplete="off" spellcheck="false" placeholder="Hunter" maxlength="24" list="classList" />
+        </label>
+      </div>
+    </section>
+
+    <datalist id="classList">
+      <option value="Novice"></option>
+      <option value="Super Novice"></option>
+      <option value="Swordman"></option>
+      <option value="Knight"></option>
+      <option value="Lord Knight"></option>
+      <option value="Crusader"></option>
+      <option value="Paladin"></option>
+      <option value="Mage"></option>
+      <option value="Wizard"></option>
+      <option value="High Wizard"></option>
+      <option value="Sage"></option>
+      <option value="Professor"></option>
+      <option value="Archer"></option>
+      <option value="Hunter"></option>
+      <option value="Sniper"></option>
+      <option value="Bard"></option>
+      <option value="Clown"></option>
+      <option value="Dancer"></option>
+      <option value="Gypsy"></option>
+      <option value="Acolyte"></option>
+      <option value="Priest"></option>
+      <option value="High Priest"></option>
+      <option value="Monk"></option>
+      <option value="Champion"></option>
+      <option value="Merchant"></option>
+      <option value="Blacksmith"></option>
+      <option value="Whitesmith"></option>
+      <option value="Alchemist"></option>
+      <option value="Creator"></option>
+      <option value="Thief"></option>
+      <option value="Assassin"></option>
+      <option value="Assassin Cross"></option>
+      <option value="Rogue"></option>
+      <option value="Stalker"></option>
+      <option value="Taekwon"></option>
+      <option value="Star Gladiator"></option>
+      <option value="Soul Linker"></option>
+      <option value="Ninja"></option>
+      <option value="Gunslinger"></option>
+    </datalist>
 
     <section class="card config" aria-labelledby="cfgHead">
       <div class="card-head">
@@ -117,10 +176,35 @@
       </div>
 
       <div class="actions">
-        <button type="button" id="btnCopy" class="btn btn-primary">Copiar resumo para Discord</button>
+        <button type="button" id="btnSave" class="btn btn-primary">Salvar sessão</button>
+        <button type="button" id="btnCopy" class="btn btn-ghost">Copiar p/ Discord</button>
         <button type="button" id="btnReset" class="btn btn-ghost">Limpar</button>
       </div>
       <p id="copyStatus" class="copy-status" aria-live="polite"></p>
+    </section>
+
+    <section class="card history" aria-labelledby="histHead">
+      <div class="card-head">
+        <h2 id="histHead">Histórico</h2>
+        <span class="hint" id="histCount">0 sessões</span>
+      </div>
+
+      <div class="history-totals">
+        <div class="ht-cell"><span>Zeny realizado</span><strong id="htZeny">0 z</strong></div>
+        <div class="ht-cell"><span>Horas farmadas</span><strong id="htHours">—</strong></div>
+        <div class="ht-cell"><span>Mobs mortos</span><strong id="htKills">0</strong></div>
+        <div class="ht-cell"><span>Z/h médio</span><strong id="htAvg">—</strong></div>
+      </div>
+
+      <ul id="historyList" class="history-list" aria-live="polite"></ul>
+
+      <div class="history-actions">
+        <button type="button" id="btnExport" class="btn btn-ghost">Exportar JSON</button>
+        <label class="btn btn-ghost" for="fileImport">Importar JSON</label>
+        <input id="fileImport" type="file" accept="application/json,.json" hidden />
+        <button type="button" id="btnClearHist" class="btn btn-ghost btn-danger">Apagar tudo</button>
+      </div>
+      <p id="histStatus" class="copy-status" aria-live="polite"></p>
     </section>
 
     <footer class="footer">
@@ -128,8 +212,8 @@
     </footer>
   </main>
 
-  <script src="items.js?v=4"></script>
-  <script src="mobs.js?v=4"></script>
-  <script src="app.js?v=4"></script>
+  <script src="items.js?v=6"></script>
+  <script src="mobs.js?v=6"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
