@@ -1,61 +1,55 @@
 "use strict";
 
-// Overcharge / Super Faturar Lv10 = +24% no preço base de venda ao NPC.
+// Super Faturar Lv10 = +24%. RA arredonda (não tronca).
 const OVERCHARGE_MULT = 1.24;
+const STORAGE_KEY = "rolg.calc.state.v2";
 
-const STORAGE_KEY = "rolg.calc.state.v1";
-
-// ITEMS comes from items.js (window.ITEMS).
 const ITEMS = window.ITEMS || [];
+const MOBS = window.MOBS || [];
 
-// Index by id and by lowercased localized name (rebuilt when language flips).
-const byId = new Map(ITEMS.map((it) => [it.id, it]));
-let nameIndex = new Map();
+const itemById = new Map(ITEMS.map((it) => [it.id, it]));
+const mobById = new Map(MOBS.map((m) => [m.id, m]));
+
+// ---------- State ----------
 
 const state = {
   lang: "pt",
-  rows: [{ id: cryptoId(), itemId: null, qty: 1 }],
+  buffs: { vip: false, kafra: false, premium: false, catfruit: false },
+  gum: 0,            // % bônus de drop
+  stamina: 1,        // 1.0 ou 0.3
+  // Cada mob no farm: { uid, mobId, kpm, drops: { itemId: { checked, realQty } } }
+  mobs: [],
   timeMode: "range",
   timeStart: "",
   timeEnd: "",
   timeHours: "",
 };
 
-// ---------- Persistence ----------
+const BUFF_PCT = { vip: 15, kafra: 50, premium: 20, catfruit: 15 };
 
 function save() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (_) {}
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (_) {}
 }
-
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") {
-      Object.assign(state, parsed);
-      if (!Array.isArray(state.rows) || state.rows.length === 0) {
-        state.rows = [{ id: cryptoId(), itemId: null, qty: 1 }];
-      }
-    }
+    const p = JSON.parse(raw);
+    if (p && typeof p === "object") Object.assign(state, p);
   } catch (_) {}
 }
+function uid() { return "m" + Math.random().toString(36).slice(2, 10); }
 
-function cryptoId() {
-  return "r" + Math.random().toString(36).slice(2, 10);
-}
+// ---------- Format ----------
 
-// ---------- Formatting ----------
-
-const nfZeny = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
+const nfZ = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
+const nfDec = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
 
 function fmtZeny(n) {
   if (!isFinite(n) || n <= 0) return "0 z";
-  return nfZeny.format(Math.round(n)) + " z";
+  return nfZ.format(Math.round(n)) + " z";
 }
-
+function fmtPct(n) { return nfDec.format(n) + "%"; }
 function fmtDuration(hours) {
   if (!isFinite(hours) || hours <= 0) return "—";
   const totalMin = Math.round(hours * 60);
@@ -66,16 +60,22 @@ function fmtDuration(hours) {
   return `${h} h ${m} min`;
 }
 
-// ---------- Calculation ----------
+// ---------- Calc ----------
 
-function lineTotal(itemId, qty) {
-  const it = byId.get(itemId);
-  if (!it || !qty || qty <= 0) return 0;
-  return Math.floor(it.price * OVERCHARGE_MULT) * qty;
+function priceOC(itemId) {
+  const it = itemById.get(itemId);
+  if (!it) return 0;
+  return Math.round(it.price * OVERCHARGE_MULT);
 }
 
-function grandTotal() {
-  return state.rows.reduce((acc, r) => acc + lineTotal(r.itemId, r.qty), 0);
+function buffsTotalPct() {
+  let s = 0;
+  for (const k of Object.keys(BUFF_PCT)) if (state.buffs[k]) s += BUFF_PCT[k];
+  s += Number(state.gum) || 0;
+  return s;
+}
+function dropMultiplier() {
+  return (1 + buffsTotalPct() / 100) * (Number(state.stamina) || 1);
 }
 
 function computeHours() {
@@ -83,169 +83,299 @@ function computeHours() {
     const h = parseFloat((state.timeHours || "").toString().replace(",", "."));
     return isFinite(h) && h > 0 ? h : 0;
   }
-  // range
   const s = parseTime(state.timeStart);
   const e = parseTime(state.timeEnd);
   if (s == null || e == null) return 0;
   let diff = e - s;
-  if (diff <= 0) diff += 24 * 60; // wraps past midnight
+  if (diff <= 0) diff += 24 * 60;
   return diff / 60;
 }
-
 function parseTime(str) {
   if (!str || typeof str !== "string") return null;
   const m = /^(\d{1,2}):(\d{2})$/.exec(str);
   if (!m) return null;
-  const h = parseInt(m[1], 10);
-  const min = parseInt(m[2], 10);
+  const h = +m[1], min = +m[2];
   if (h < 0 || h > 23 || min < 0 || min > 59) return null;
   return h * 60 + min;
 }
 
-// ---------- Item resolution ----------
-
-function rebuildNameIndex() {
-  nameIndex = new Map();
-  for (const it of ITEMS) {
-    const key = (state.lang === "en" ? it.en : it.pt).toLowerCase();
-    if (!nameIndex.has(key)) nameIndex.set(key, it);
+function totalsForMob(mobEntry) {
+  const mob = mobById.get(mobEntry.mobId);
+  if (!mob) return { expected: 0, realized: 0, kills: 0 };
+  const hours = computeHours();
+  const minutes = hours * 60;
+  const kpm = Number(mobEntry.kpm) || 0;
+  const kills = kpm * minutes;
+  const mult = dropMultiplier();
+  let expected = 0, realized = 0;
+  for (const drop of mob.drops) {
+    const entry = mobEntry.drops[drop.itemId] || { checked: !drop.isCard, realQty: 0 };
+    if (!entry.checked) continue;
+    const p = priceOC(drop.itemId);
+    const expQty = kills * (drop.rate / 100) * mult;
+    expected += expQty * p;
+    const rq = Number(entry.realQty) || 0;
+    if (rq > 0) realized += rq * p;
   }
+  return { expected, realized, kills };
 }
-
-function resolveByName(typed) {
-  if (!typed) return null;
-  return nameIndex.get(typed.trim().toLowerCase()) || null;
-}
-
-function displayName(itemId) {
-  const it = byId.get(itemId);
-  if (!it) return "";
-  return state.lang === "en" ? it.en : it.pt;
+function grandTotals() {
+  let exp = 0, real = 0;
+  for (const me of state.mobs) {
+    const t = totalsForMob(me);
+    exp += t.expected;
+    real += t.realized;
+  }
+  return { exp, real };
 }
 
 // ---------- Render ----------
 
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => document.querySelectorAll(sel);
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => document.querySelectorAll(s);
 
-function renderDatalist() {
-  const list = $("#itemList");
-  // Build once per language flip — 882 entries.
-  const seen = new Set();
-  const opts = [];
-  for (const it of ITEMS) {
-    const name = state.lang === "en" ? it.en : it.pt;
-    if (seen.has(name)) continue;
-    seen.add(name);
-    const npcPrice = Math.floor(it.price * OVERCHARGE_MULT);
+function mobName(mob) { return state.lang === "en" ? mob.en : mob.pt; }
+function itemName(it) { return state.lang === "en" ? it.en : it.pt; }
+
+function renderMobPicker() {
+  const sel = $("#mobPicker");
+  sel.replaceChildren();
+  for (const m of MOBS) {
     const opt = document.createElement("option");
-    opt.value = name;
-    opt.label = `${npcPrice} z`;
-    opts.push(opt);
+    opt.value = m.id;
+    opt.textContent = mobName(m);
+    sel.appendChild(opt);
   }
-  list.replaceChildren(...opts);
 }
 
-function renderRows() {
-  const ul = $("#rows");
+function renderMobs() {
+  const ul = $("#mobs");
   ul.replaceChildren();
-  for (const row of state.rows) {
-    ul.appendChild(rowEl(row));
+  if (state.mobs.length === 0) {
+    const li = document.createElement("li");
+    li.className = "mob-empty";
+    li.textContent = state.lang === "en" ? "No mobs added yet." : "Nenhum mob adicionado ainda.";
+    ul.appendChild(li);
+    return;
+  }
+  for (const me of state.mobs) {
+    ul.appendChild(mobEl(me));
   }
 }
 
-function rowEl(row) {
+function mobEl(me) {
+  const mob = mobById.get(me.mobId);
   const li = document.createElement("li");
-  li.className = "row";
-  li.dataset.rowId = row.id;
+  li.className = "mob";
+  if (!mob) {
+    li.textContent = `(mob desconhecido: ${me.mobId})`;
+    return li;
+  }
 
-  const itemInput = document.createElement("input");
-  itemInput.type = "text";
-  itemInput.className = "item-input";
-  itemInput.setAttribute("list", "itemList");
-  itemInput.setAttribute("autocomplete", "off");
-  itemInput.setAttribute("autocapitalize", "off");
-  itemInput.setAttribute("spellcheck", "false");
-  itemInput.placeholder = state.lang === "en" ? "Item name" : "Nome do item";
-  itemInput.value = displayName(row.itemId);
-  itemInput.addEventListener("input", () => {
-    const it = resolveByName(itemInput.value);
-    row.itemId = it ? it.id : null;
-    updateRowTotal(li, row);
+  // Header
+  const head = document.createElement("div");
+  head.className = "mob-head";
+
+  const title = document.createElement("h3");
+  title.textContent = mobName(mob);
+
+  const kpmWrap = document.createElement("label");
+  kpmWrap.className = "kpm";
+  const kpmLabel = document.createElement("span");
+  kpmLabel.textContent = "Mortes/min";
+  const kpmInput = document.createElement("input");
+  kpmInput.type = "number";
+  kpmInput.min = "0";
+  kpmInput.step = "0.1";
+  kpmInput.inputMode = "decimal";
+  kpmInput.placeholder = "0";
+  kpmInput.value = me.kpm || "";
+  kpmInput.addEventListener("input", () => {
+    me.kpm = parseFloat(kpmInput.value.replace(",", ".")) || 0;
+    updateMobBody(li, me);
     updateResults();
     save();
   });
-  itemInput.addEventListener("blur", () => {
-    // Snap to canonical case when matched
-    if (row.itemId) itemInput.value = displayName(row.itemId);
-  });
-
-  const qtyInput = document.createElement("input");
-  qtyInput.type = "number";
-  qtyInput.className = "qty-input";
-  qtyInput.min = "0";
-  qtyInput.step = "1";
-  qtyInput.inputMode = "numeric";
-  qtyInput.placeholder = "qtd";
-  qtyInput.value = row.qty || "";
-  qtyInput.addEventListener("input", () => {
-    const n = parseInt(qtyInput.value, 10);
-    row.qty = isFinite(n) && n > 0 ? n : 0;
-    updateRowTotal(li, row);
-    updateResults();
-    save();
-  });
+  kpmWrap.append(kpmLabel, kpmInput);
 
   const removeBtn = document.createElement("button");
   removeBtn.type = "button";
-  removeBtn.className = "row-remove";
-  removeBtn.setAttribute("aria-label", "Remover item");
+  removeBtn.className = "icon-btn";
+  removeBtn.setAttribute("aria-label", "Remover mob");
   removeBtn.textContent = "×";
   removeBtn.addEventListener("click", () => {
-    state.rows = state.rows.filter((r) => r.id !== row.id);
-    if (state.rows.length === 0) state.rows.push({ id: cryptoId(), itemId: null, qty: 1 });
-    renderRows();
+    state.mobs = state.mobs.filter((m) => m.uid !== me.uid);
+    renderMobs();
+    tagMobLis();
     updateResults();
     save();
   });
 
-  const total = document.createElement("div");
-  total.className = "row-total";
+  head.append(title, kpmWrap, removeBtn);
+  li.appendChild(head);
 
-  li.append(itemInput, qtyInput, removeBtn, total);
-  updateRowTotal(li, row);
+  const killsInfo = document.createElement("div");
+  killsInfo.className = "mob-kills";
+  li.appendChild(killsInfo);
+
+  // Drops
+  const dropsEl = document.createElement("div");
+  dropsEl.className = "drops";
+  li.appendChild(dropsEl);
+
+  for (const drop of mob.drops) {
+    dropsEl.appendChild(dropEl(me, drop));
+  }
+
+  updateMobBody(li, me);
   return li;
 }
 
-function updateRowTotal(li, row) {
-  const total = li.querySelector(".row-total");
-  const v = lineTotal(row.itemId, row.qty);
-  total.innerHTML = v > 0 ? `Subtotal <b>${fmtZeny(v)}</b>` : "";
+function dropEl(me, drop) {
+  const it = itemById.get(drop.itemId);
+  const entry = me.drops[drop.itemId] || (me.drops[drop.itemId] = { checked: !drop.isCard, realQty: 0 });
+
+  const row = document.createElement("div");
+  row.className = "drop";
+  if (drop.isCard) row.classList.add("drop-card");
+
+  // Checkbox + name + rate (header line)
+  const top = document.createElement("label");
+  top.className = "drop-top";
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = !!entry.checked;
+  cb.addEventListener("change", () => {
+    entry.checked = cb.checked;
+    row.classList.toggle("is-off", !entry.checked);
+    updateDropBody(row, me, drop);
+    updateMobBody(row.closest(".mob"), me);
+    updateResults();
+    save();
+  });
+  const name = document.createElement("span");
+  name.className = "drop-name";
+  name.textContent = it ? itemName(it) : `id ${drop.itemId}`;
+  const rate = document.createElement("span");
+  rate.className = "drop-rate";
+  rate.textContent = fmtPct(drop.rate);
+  top.append(cb, name, rate);
+
+  const body = document.createElement("div");
+  body.className = "drop-body";
+
+  const expLine = document.createElement("div");
+  expLine.className = "drop-line";
+  const expLab = document.createElement("span"); expLab.textContent = "Esp:";
+  const expVal = document.createElement("span"); expVal.className = "drop-val";
+  expLine.append(expLab, expVal);
+
+  const realLine = document.createElement("div");
+  realLine.className = "drop-line";
+  const realLab = document.createElement("span"); realLab.textContent = "Real:";
+  const realInput = document.createElement("input");
+  realInput.type = "number";
+  realInput.min = "0";
+  realInput.step = "1";
+  realInput.inputMode = "numeric";
+  realInput.className = "real-qty";
+  realInput.placeholder = "qtd";
+  realInput.value = entry.realQty || "";
+  realInput.addEventListener("input", () => {
+    entry.realQty = parseInt(realInput.value, 10) || 0;
+    updateDropBody(row, me, drop);
+    updateMobBody(row.closest(".mob"), me);
+    updateResults();
+    save();
+  });
+  const realVal = document.createElement("span"); realVal.className = "drop-val";
+  realLine.append(realLab, realInput, realVal);
+
+  body.append(expLine, realLine);
+  row.append(top, body);
+
+  if (!entry.checked) row.classList.add("is-off");
+  updateDropBody(row, me, drop);
+  return row;
 }
 
-function updateResults() {
-  const total = grandTotal();
+function updateDropBody(row, me, drop) {
+  const it = itemById.get(drop.itemId);
+  const p = priceOC(drop.itemId);
+  const entry = me.drops[drop.itemId] || { checked: !drop.isCard, realQty: 0 };
   const hours = computeHours();
-  $("#rTotal").textContent = fmtZeny(total);
-  $("#rTime").textContent = fmtDuration(hours);
-  $("#rPerHour").textContent = hours > 0 && total > 0 ? fmtZeny(total / hours) + "/h" : "—";
+  const kpm = Number(me.kpm) || 0;
+  const kills = kpm * hours * 60;
+  const mult = dropMultiplier();
+
+  const expQty = entry.checked ? kills * (drop.rate / 100) * mult : 0;
+  const expZ = expQty * p;
+  const realQty = entry.checked ? (Number(entry.realQty) || 0) : 0;
+  const realZ = realQty * p;
+
+  const lines = row.querySelectorAll(".drop-val");
+  lines[0].textContent = expQty > 0
+    ? `${nfDec.format(expQty)} × ${fmtZeny(p)} = ${fmtZeny(expZ)}`
+    : `0 × ${fmtZeny(p)}`;
+  lines[1].textContent = realQty > 0
+    ? `× ${fmtZeny(p)} = ${fmtZeny(realZ)}`
+    : `× ${fmtZeny(p)}`;
 }
 
-// ---------- Time UI ----------
-
-function syncTimeUI() {
-  const range = $("#timeRange");
-  const direct = $("#timeDirect");
-  range.classList.toggle("is-hidden", state.timeMode !== "range");
-  direct.classList.toggle("is-hidden", state.timeMode !== "direct");
-  $("#timeStart").value = state.timeStart || "";
-  $("#timeEnd").value = state.timeEnd || "";
-  $("#timeHours").value = state.timeHours || "";
-  for (const r of $$('input[name="timeMode"]')) {
-    r.checked = r.value === state.timeMode;
+function updateMobBody(li, me) {
+  if (!li) return;
+  const info = li.querySelector(".mob-kills");
+  if (!info) return;
+  const hours = computeHours();
+  const kpm = Number(me.kpm) || 0;
+  const kills = kpm * hours * 60;
+  const t = totalsForMob(me);
+  if (hours > 0 && kpm > 0) {
+    info.innerHTML = `${nfZ.format(Math.round(kills))} kills · esperado <b>${fmtZeny(t.expected)}</b> · realizado <b>${fmtZeny(t.realized)}</b>`;
+  } else {
+    info.innerHTML = `<span class="dim">Defina o tempo e KPM pra ver kills/esperado.</span>`;
+  }
+  // also refresh all drop bodies
+  for (const dr of li.querySelectorAll(".drop")) {
+    const dropName = dr.querySelector(".drop-name")?.textContent;
+    // We can't easily look up the drop here; instead refresh by iterating mob's drops list
+  }
+  const mob = mobById.get(me.mobId);
+  if (mob) {
+    const rows = li.querySelectorAll(".drop");
+    mob.drops.forEach((drop, idx) => {
+      if (rows[idx]) updateDropBody(rows[idx], me, drop);
+    });
   }
 }
 
+function updateResults() {
+  const hours = computeHours();
+  const { exp, real } = grandTotals();
+  $("#rTime").textContent = fmtDuration(hours);
+  $("#rExpTotal").textContent = fmtZeny(exp);
+  $("#rRealTotal").textContent = fmtZeny(real);
+  $("#rExpPerHour").textContent = hours > 0 && exp > 0 ? fmtZeny(exp / hours) + "/h" : "—";
+  $("#rRealPerHour").textContent = hours > 0 && real > 0 ? fmtZeny(real / hours) + "/h" : "—";
+  // Also update all mob bodies in case time changed
+  for (const li of $$(".mob")) {
+    const uidKey = li.dataset.uid;
+    const me = state.mobs.find((m) => m.uid === uidKey);
+    if (me) updateMobBody(li, me);
+  }
+  $("#cfgSum").textContent = `Multiplicador efetivo: ×${nfDec.format(dropMultiplier())} (buffs +${buffsTotalPct()}%)`;
+}
+
+// ---------- Time / Lang / Config UI ----------
+
+function syncTimeUI() {
+  $("#timeRange").classList.toggle("is-hidden", state.timeMode !== "range");
+  $("#timeDirect").classList.toggle("is-hidden", state.timeMode !== "direct");
+  $("#timeStart").value = state.timeStart || "";
+  $("#timeEnd").value = state.timeEnd || "";
+  $("#timeHours").value = state.timeHours || "";
+  for (const r of $$('input[name="timeMode"]')) r.checked = r.value === state.timeMode;
+}
 function syncLangUI() {
   for (const b of $$(".lang-btn")) {
     const active = b.dataset.lang === state.lang;
@@ -253,34 +383,60 @@ function syncLangUI() {
     b.setAttribute("aria-pressed", active ? "true" : "false");
   }
 }
+function syncConfigUI() {
+  for (const cb of $$('.buffs input[type="checkbox"]')) {
+    cb.checked = !!state.buffs[cb.dataset.buff];
+  }
+  $("#gum").value = String(state.gum);
+  $("#stamina").value = String(state.stamina);
+}
 
 // ---------- Copy summary ----------
 
 function buildSummary() {
-  const lines = [];
-  let total = 0;
-  for (const row of state.rows) {
-    const it = byId.get(row.itemId);
-    if (!it || !row.qty) continue;
-    const lt = lineTotal(row.itemId, row.qty);
-    total += lt;
-    const name = state.lang === "en" ? it.en : it.pt;
-    lines.push(`${row.qty}x ${name} → ${fmtZeny(lt)}`);
-  }
-  if (lines.length === 0) return null;
-
+  if (state.mobs.length === 0) return null;
   const hours = computeHours();
-  const out = [];
-  out.push("Calculadora Landverse (Super Faturar Lv10)");
-  out.push("─".repeat(36));
-  out.push(...lines);
-  out.push("─".repeat(36));
-  out.push(`Total:    ${fmtZeny(total)}`);
-  if (hours > 0) {
-    out.push(`Tempo:    ${fmtDuration(hours)}`);
-    out.push(`Por hora: ${fmtZeny(total / hours)}/h`);
+  const mult = dropMultiplier();
+  const buffPct = buffsTotalPct();
+
+  const lines = [];
+  lines.push("Calculadora Landverse — Super Faturar Lv10");
+  if (buffPct > 0 || state.stamina !== 1) {
+    const parts = [];
+    if (buffPct > 0) parts.push(`buffs +${buffPct}%`);
+    if (Number(state.stamina) === 0.3) parts.push("sem stamina");
+    lines.push(`Modificador: ×${nfDec.format(mult)} (${parts.join(", ")})`);
   }
-  return "```\n" + out.join("\n") + "\n```";
+  lines.push("─".repeat(38));
+
+  let totExp = 0, totReal = 0;
+  for (const me of state.mobs) {
+    const mob = mobById.get(me.mobId);
+    if (!mob) continue;
+    const t = totalsForMob(me);
+    const kpm = Number(me.kpm) || 0;
+    const kills = kpm * hours * 60;
+    totExp += t.expected;
+    totReal += t.realized;
+    lines.push(`${mobName(mob)} · ${kpm}/min · ${nfZ.format(Math.round(kills))} kills`);
+    for (const drop of mob.drops) {
+      const e = me.drops[drop.itemId];
+      if (!e || !e.checked) continue;
+      const it = itemById.get(drop.itemId);
+      const p = priceOC(drop.itemId);
+      const expQty = kills * (drop.rate / 100) * mult;
+      const real = Number(e.realQty) || 0;
+      const name = it ? itemName(it) : `#${drop.itemId}`;
+      lines.push(`  ${name} ${fmtPct(drop.rate)} · esp ${nfDec.format(expQty)} (${fmtZeny(expQty * p)}) · real ${real} (${fmtZeny(real * p)})`);
+    }
+    lines.push(`  ↳ Subtotal: esp ${fmtZeny(t.expected)} · real ${fmtZeny(t.realized)}`);
+  }
+  lines.push("─".repeat(38));
+  lines.push(`Tempo:     ${fmtDuration(hours)}`);
+  lines.push(`Esperado:  ${fmtZeny(totExp)}${hours > 0 ? ` (${fmtZeny(totExp / hours)}/h)` : ""}`);
+  lines.push(`Realizado: ${fmtZeny(totReal)}${hours > 0 ? ` (${fmtZeny(totReal / hours)}/h)` : ""}`);
+
+  return "```\n" + lines.join("\n") + "\n```";
 }
 
 async function copySummary() {
@@ -288,16 +444,13 @@ async function copySummary() {
   const status = $("#copyStatus");
   if (!text) {
     status.style.color = "var(--danger)";
-    status.textContent = "Adicione pelo menos um item válido.";
+    status.textContent = "Adicione pelo menos um mob.";
     setTimeout(() => (status.textContent = ""), 2500);
     return;
   }
   try {
     await navigator.clipboard.writeText(text);
-    status.style.color = "var(--success)";
-    status.textContent = "Resumo copiado! Cole no Discord.";
   } catch (_) {
-    // Fallback: select-and-copy via textarea
     const ta = document.createElement("textarea");
     ta.value = text;
     ta.style.position = "fixed";
@@ -306,49 +459,67 @@ async function copySummary() {
     ta.select();
     try { document.execCommand("copy"); } catch (_) {}
     document.body.removeChild(ta);
-    status.style.color = "var(--success)";
-    status.textContent = "Resumo copiado! Cole no Discord.";
   }
+  status.style.color = "var(--success)";
+  status.textContent = "Resumo copiado! Cole no Discord.";
   setTimeout(() => (status.textContent = ""), 2500);
 }
 
 // ---------- Wire-up ----------
 
+function addMob(mobId) {
+  const mob = mobById.get(mobId);
+  if (!mob) return;
+  const drops = {};
+  for (const d of mob.drops) drops[d.itemId] = { checked: !d.isCard, realQty: 0 };
+  state.mobs.push({ uid: uid(), mobId, kpm: 0, drops });
+  renderMobs();
+  tagMobLis();
+  updateResults();
+  save();
+}
+
+function tagMobLis() {
+  const lis = $$(".mob");
+  for (let i = 0; i < lis.length; i++) {
+    if (state.mobs[i]) lis[i].dataset.uid = state.mobs[i].uid;
+  }
+}
+
 function bind() {
-  $("#addRow").addEventListener("click", () => {
-    state.rows.push({ id: cryptoId(), itemId: null, qty: 1 });
-    renderRows();
-    updateResults();
-    save();
-    // Focus the newly added item input
-    const inputs = $$(".row .item-input");
-    if (inputs.length) inputs[inputs.length - 1].focus();
-  });
-
-  $("#btnCopy").addEventListener("click", copySummary);
-
-  $("#btnReset").addEventListener("click", () => {
-    if (!confirm("Limpar todos os itens e tempos?")) return;
-    state.rows = [{ id: cryptoId(), itemId: null, qty: 1 }];
-    state.timeStart = "";
-    state.timeEnd = "";
-    state.timeHours = "";
-    renderRows();
-    syncTimeUI();
-    updateResults();
-    save();
+  $("#addMob").addEventListener("click", () => {
+    addMob($("#mobPicker").value);
   });
 
   for (const b of $$(".lang-btn")) {
     b.addEventListener("click", () => {
       state.lang = b.dataset.lang;
-      rebuildNameIndex();
-      renderDatalist();
-      renderRows();
+      renderMobPicker();
+      renderMobs();
+      tagMobLis();
       syncLangUI();
+      updateResults();
       save();
     });
   }
+
+  for (const cb of $$('.buffs input[type="checkbox"]')) {
+    cb.addEventListener("change", () => {
+      state.buffs[cb.dataset.buff] = cb.checked;
+      updateResults();
+      save();
+    });
+  }
+  $("#gum").addEventListener("change", (e) => {
+    state.gum = parseInt(e.target.value, 10) || 0;
+    updateResults();
+    save();
+  });
+  $("#stamina").addEventListener("change", (e) => {
+    state.stamina = parseFloat(e.target.value) || 1;
+    updateResults();
+    save();
+  });
 
   for (const r of $$('input[name="timeMode"]')) {
     r.addEventListener("change", () => {
@@ -358,19 +529,30 @@ function bind() {
       save();
     });
   }
-
   $("#timeStart").addEventListener("input", (e) => { state.timeStart = e.target.value; updateResults(); save(); });
   $("#timeEnd").addEventListener("input", (e) => { state.timeEnd = e.target.value; updateResults(); save(); });
   $("#timeHours").addEventListener("input", (e) => { state.timeHours = e.target.value; updateResults(); save(); });
+
+  $("#btnCopy").addEventListener("click", copySummary);
+  $("#btnReset").addEventListener("click", () => {
+    if (!confirm("Limpar todos os mobs e tempos?")) return;
+    state.mobs = [];
+    state.timeStart = ""; state.timeEnd = ""; state.timeHours = "";
+    renderMobs();
+    syncTimeUI();
+    updateResults();
+    save();
+  });
 }
 
 // ---------- Init ----------
 
 load();
-rebuildNameIndex();
-renderDatalist();
-renderRows();
+renderMobPicker();
+renderMobs();
+tagMobLis();
 syncLangUI();
+syncConfigUI();
 syncTimeUI();
 updateResults();
 bind();

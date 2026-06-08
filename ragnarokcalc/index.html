@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Calculadora Ragnarok Landverse</title>
-  <meta name="description" content="Calculadora de farm — zeny por hora com Super Faturar Lv10. Itens em PT/EN." />
+  <meta name="description" content="Calculadora de farm — zeny esperado e realizado por hora, com Super Faturar Lv10 e buffs Landverse." />
   <meta name="theme-color" content="#36393f" />
   <meta property="og:title" content="Calculadora Ragnarok Landverse" />
-  <meta property="og:description" content="Zeny/hora com Super Faturar Lv10. Itens PT/EN." />
+  <meta property="og:description" content="Esperado vs realizado, zeny/hora, buffs Landverse. PT/EN." />
   <meta property="og:type" content="website" />
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -15,29 +15,62 @@
   <main class="app">
     <header class="topbar">
       <h1>Calculadora <span class="brand">Landverse</span></h1>
-      <div class="lang" role="group" aria-label="Idioma dos itens">
+      <div class="lang" role="group" aria-label="Idioma">
         <button type="button" class="lang-btn is-active" data-lang="pt" aria-pressed="true">PT</button>
         <button type="button" class="lang-btn" data-lang="en" aria-pressed="false">EN</button>
       </div>
     </header>
 
-    <section class="card">
+    <section class="card config" aria-labelledby="cfgHead">
       <div class="card-head">
-        <h2>Itens farmados</h2>
-        <span class="hint">Preços já com Super Faturar Lv10 (+24%)</span>
+        <h2 id="cfgHead">Configurações</h2>
+        <span class="hint">afetam só o esperado</span>
       </div>
-
-      <ul id="rows" class="rows" aria-label="Lista de itens"></ul>
-
-      <button type="button" id="addRow" class="btn btn-ghost">+ Adicionar item</button>
+      <div class="buffs">
+        <label class="chip"><input type="checkbox" data-buff="vip" /><span>VIP <em>+15%</em></span></label>
+        <label class="chip"><input type="checkbox" data-buff="kafra" /><span>Kafra VIP <em>+50%</em></span></label>
+        <label class="chip"><input type="checkbox" data-buff="premium" /><span>Premium <em>+20%</em></span></label>
+        <label class="chip"><input type="checkbox" data-buff="catfruit" /><span>Cat Fruit <em>+15%</em></span></label>
+      </div>
+      <div class="cfg-row">
+        <label class="field">
+          <span>Gum</span>
+          <select id="gum">
+            <option value="0">Sem Gum</option>
+            <option value="50">Gum 50%</option>
+            <option value="100">Gum 100%</option>
+            <option value="150">Gum 150%</option>
+            <option value="200">Gum 200%</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Stamina</span>
+          <select id="stamina">
+            <option value="1">Com stamina (×1,0)</option>
+            <option value="0.3">Sem stamina (×0,3)</option>
+          </select>
+        </label>
+      </div>
+      <p class="cfg-sum" id="cfgSum">Multiplicador efetivo: ×1,00</p>
     </section>
 
-    <section class="card">
+    <section class="card" aria-labelledby="mobsHead">
       <div class="card-head">
-        <h2>Tempo de farm</h2>
+        <h2 id="mobsHead">Mobs farmados</h2>
+        <span class="hint">Super Faturar Lv10 (+24%)</span>
       </div>
+      <ul id="mobs" class="mobs"></ul>
+      <div class="add-mob">
+        <select id="mobPicker"></select>
+        <button type="button" id="addMob" class="btn btn-ghost">+ Adicionar</button>
+      </div>
+    </section>
 
-      <div class="time-modes" role="radiogroup" aria-label="Como informar o tempo">
+    <section class="card" aria-labelledby="timeHead">
+      <div class="card-head">
+        <h2 id="timeHead">Tempo de farm</h2>
+      </div>
+      <div class="time-modes" role="radiogroup">
         <label class="radio">
           <input type="radio" name="timeMode" value="range" checked />
           <span>Horário início → fim</span>
@@ -47,7 +80,6 @@
           <span>Horas direto</span>
         </label>
       </div>
-
       <div id="timeRange" class="time-fields">
         <label class="field">
           <span>Início</span>
@@ -58,7 +90,6 @@
           <input type="time" id="timeEnd" step="60" />
         </label>
       </div>
-
       <div id="timeDirect" class="time-fields is-hidden">
         <label class="field">
           <span>Horas</span>
@@ -69,16 +100,24 @@
 
     <section class="card results" aria-live="polite">
       <div class="result-row">
-        <span>Total</span>
-        <strong id="rTotal">0 z</strong>
-      </div>
-      <div class="result-row">
         <span>Tempo</span>
         <strong id="rTime">—</strong>
       </div>
+      <div class="result-row">
+        <span>Esperado</span>
+        <strong id="rExpTotal">0 z</strong>
+      </div>
       <div class="result-row result-highlight">
-        <span>Zeny por hora</span>
-        <strong id="rPerHour">—</strong>
+        <span>Esperado por hora</span>
+        <strong id="rExpPerHour">—</strong>
+      </div>
+      <div class="result-row">
+        <span>Realizado</span>
+        <strong id="rRealTotal">0 z</strong>
+      </div>
+      <div class="result-row result-highlight">
+        <span>Realizado por hora</span>
+        <strong id="rRealPerHour">—</strong>
       </div>
 
       <div class="actions">
@@ -89,13 +128,12 @@
     </section>
 
     <footer class="footer">
-      <p>Preços base: rAthena pre-renewal · Tradução PT: CronusDATA · Edite <code>items.js</code> pra ajustar.</p>
+      <p>Dados: Ragnarok Analytics (Landverse America) · Edite <code>items.js</code> e <code>mobs.js</code>.</p>
     </footer>
   </main>
 
-  <datalist id="itemList"></datalist>
-
   <script src="items.js"></script>
+  <script src="mobs.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
